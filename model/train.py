@@ -8,6 +8,47 @@ from sklearn.metrics.pairwise import cosine_similarity
 import javalang
 
 
+def load_dataset(path):
+    full_paths = list(path.iterdir())
+    return full_paths
+
+
+def load_original_file(path):
+    original_file_path_directory = str(path) + "/original"
+    original_file_path_file = Path(original_file_path_directory)
+    original_file = list(original_file_path_file.iterdir())
+
+    return original_file[0]
+
+
+def load_plagiarized_files(path):
+    plagiarized_path = str(path) + "/plagiarized"
+    plagiarized_path = Path(plagiarized_path)
+    plagiarized_L_directories = list(plagiarized_path.iterdir())
+    plagiarized_files_paths = []
+    for path in plagiarized_L_directories:
+        plagiarized_files_paths = plagiarized_files_paths + list(path.iterdir())
+
+    plagiarized_files = []
+    for path in plagiarized_files_paths:
+        plagiarized_files = plagiarized_files + list(path.iterdir())
+
+    return plagiarized_files
+
+
+def load_non_plagiarized_files(path):
+    non_plagiarized_path = str(path) + "/non-plagiarized"
+    non_plagiarized_path = Path(non_plagiarized_path)
+
+    non_plagiarized_inner = list(non_plagiarized_path.iterdir())
+
+    non_plagiarized_files = []
+    for path in non_plagiarized_inner:
+        non_plagiarized_files = non_plagiarized_files + list(path.iterdir())
+
+    return non_plagiarized_files
+
+
 # Tokenization function for Java files
 def tokenize(file_path):
     with open(file_path, 'r') as file:
@@ -18,6 +59,11 @@ def tokenize(file_path):
 
 
 # Calculate token overlap (Jaccard similarity) between two files
+
+# The Jaccard index is a statistic used for gauging the similarity and
+# diversity of sample sets. It is defined in general taking the ratio
+# of two sizes, the intersection size divided by the union size, also
+# called intersection over union
 def calculate_token_overlap(file1, file2):
     tokens1 = set(tokenize(file1))
     tokens2 = set(tokenize(file2))
@@ -65,45 +111,22 @@ def calculate_semantic_similarity(file1, file2):
     return cosine_similarity(vec1, vec2)[0][0]
 
 
-def load_dataset(path):
-    full_paths = list(path.iterdir())
-    return full_paths
+# Función para asignar la etiqueta
+def get_label(original_file, file):
+    token_overlap = calculate_token_overlap(original_file, file)
+    ast_similarity = calculate_ast_similarity(original_file, file)
+    semantic_similarity = calculate_semantic_similarity(original_file, file)
 
+    # Si la similitud semántica es muy alta (e.g., > 0.8)
+    if semantic_similarity > 0.8:
+        return 1
 
-def load_original_file(path):
-    original_file_path_directory = str(path) + "/original"
-    original_file_path_file = Path(original_file_path_directory)
-    original_file = list(original_file_path_file.iterdir())
+    # Si la similitud semántica es baja, es un archivo no plagiado
+    if semantic_similarity < 0.2:
+        return 0
 
-    return original_file[0]
-
-
-def load_plagiarized_files(path):
-    plagiarized_path = str(path) + "/plagiarized"
-    plagiarized_path = Path(plagiarized_path)
-    plagiarized_L_directories = list(plagiarized_path.iterdir())
-    plagiarized_files_paths = []
-    for path in plagiarized_L_directories:
-        plagiarized_files_paths = plagiarized_files_paths + list(path.iterdir())
-
-    plagiarized_files = []
-    for path in plagiarized_files_paths:
-        plagiarized_files = plagiarized_files + list(path.iterdir())
-
-    return plagiarized_files
-
-
-def load_non_plagiarized_files(path):
-    non_plagiarized_path = str(path) + "/non-plagiarized"
-    non_plagiarized_path = Path(non_plagiarized_path)
-
-    non_plagiarized_inner = list(non_plagiarized_path.iterdir())
-
-    non_plagiarized_files = []
-    for path in non_plagiarized_inner:
-        non_plagiarized_files = non_plagiarized_files + list(path.iterdir())
-
-    return non_plagiarized_files
+    plagiarism_percentage = (semantic_similarity + token_overlap + ast_similarity) / 3.0 * 100
+    return plagiarism_percentage
 
 
 # Prepare features and labels
@@ -113,19 +136,18 @@ labels = []
 dataset = Path("/home/stormblessed/parser-plagio/data/IR-Plag-Dataset/")
 cases = load_dataset(dataset)
 
-# Loop through your dataset, computing similarity features and labels
-for case in cases:  # This assumes you have a list or structure with paths to your cases
-    original_file = load_original_file(case)  # Load path to the original file in each case
+for case in cases:
+    original_file = load_original_file(case)
     plagiarized_files = load_plagiarized_files(case)
     non_plagiarized_files = load_non_plagiarized_files(case)
-    for file in plagiarized_files + non_plagiarized_files:  # Paths to plagiarized and non-plagiarized files
+    for file in plagiarized_files + non_plagiarized_files:
         token_overlap = calculate_token_overlap(original_file, file)
         ast_similarity = calculate_ast_similarity(original_file, file)
         semantic_similarity = calculate_semantic_similarity(original_file, file)
 
         # Append features and labels
         features.append([token_overlap, ast_similarity, semantic_similarity])
-        labels.append(get_label(case, file))  # Replace with actual plagiarism percentage or binary label
+        labels.append(get_label(original_file, file))
 
 # Convert to numpy arrays
 X = np.array(features)
